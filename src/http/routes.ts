@@ -3,6 +3,7 @@ import type { OrderItem } from '../models.js';
 import type { CatalogRepository } from '../repositories/catalog.js';
 import type { OrderRepository } from '../repositories/orders.js';
 import { ApiError } from './errors.js';
+import type { AllocationService } from '../allocation/service.js'
 
 function isRecord(value: unknown): value is Record<string, unknown> {
   return typeof value === 'object' && value !== null && !Array.isArray(value);
@@ -28,7 +29,9 @@ async function parseItems(body: unknown, catalog: CatalogRepository): Promise<Or
   return items;
 }
 
-export function createRoutes(orders: OrderRepository, catalog: CatalogRepository): Router {
+export function createRoutes(
+  orders: OrderRepository, catalog: CatalogRepository, allocation: AllocationService,
+): Router {
   const router = Router();
   router.get('/products', async (_req, res) => res.json(await catalog.products()));
   router.get('/warehouses', async (_req, res) => res.json(await catalog.warehouses()));
@@ -47,6 +50,11 @@ export function createRoutes(orders: OrderRepository, catalog: CatalogRepository
   router.post('/orders', async (req, res) => {
     const order = await orders.create(await parseItems(req.body as unknown, catalog));
     res.status(201).location(`/orders/${order.id}`).json(order);
+  });
+  router.post('/orders/:id/allocate', async (req, res) => {
+    if (!await orders.find(req.params.id)) throw new ApiError(404, 'Order not found');
+    const result = await allocation.allocate(req.params.id);
+    res.status(result.statusCode).json(result.body);
   });
   return router;
 }
